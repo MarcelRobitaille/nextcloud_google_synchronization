@@ -246,7 +246,7 @@ class GoogleAPIController extends Controller {
 		if ($this->accessToken === '') {
 			return new DataResponse('', 400);
 		}
-		$result = $this->googleCalendarAPIService->registerSyncCalendar($this->accessToken, $this->userId, $calId, $calName, $color);
+		$result = $this->googleCalendarAPIService->registerSyncCalendar($this->userId, $calId, $calName, $color);
 		$response = new DataResponse($result, 200);
 		return $response;
 	}
