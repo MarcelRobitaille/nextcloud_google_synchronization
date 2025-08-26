@@ -103,9 +103,9 @@
 							{{ t('google_synchronization', 'Import calendar') }}
 						</NcButton>
 						<NcCheckboxRadioSwitch
-							:checked="cal.isJobRegistered"
+							:model-value="cal.isJobRegistered"
 							:loading="loadingSyncCalendar[cal.id]"
-							@update:checked="onCalendarSyncChange(cal)">
+							@update:model-value="onCalendarSyncChange(cal)">
 							{{ t('google_synchronization', 'Sync calendar') }}
 						</NcCheckboxRadioSwitch>
 					</div>
@@ -588,7 +588,7 @@ export default {
 					color: cal.backgroundColor || '#0082c9',
 				},
 			}
-			this.$set(this.loadingSyncCalendar, calId, true)
+			this.loadingSyncCalendar[calId] = true
 			const actionMessage = `${desiredState ? '' : 'un'}register`
 			const successMessage = `Successfully ${actionMessage}ed background job`
 			const errorMessage = `Failed to ${actionMessage} background job`
@@ -608,7 +608,7 @@ export default {
 					)
 				})
 				.finally(() => {
-					this.$set(this.loadingSyncCalendar, calId, false)
+					this.loadingSyncCalendar[calId] = false
 				})
 		},
 		getDriveImportValues(launchLoop = false) {
