@@ -73,7 +73,6 @@ class Notifier implements INotifier {
 					->setIcon($this->url->getAbsoluteURL($this->url->imagePath(Application::APP_ID, 'app-dark.svg')))
 					->setLink($this->url->linkToRouteAbsolute('files.view.index', ['dir' => $targetPath]));
 				return $notification;
-
 			case 'import_drive_finished':
 				/** @var array{nbImported?:string, targetPath: string} $p */
 				$p = $notification->getSubjectParameters();
