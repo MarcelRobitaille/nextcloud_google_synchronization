@@ -19,7 +19,7 @@ use OCA\Google\Service\GoogleDriveAPIService;
 use OCA\Google\Service\SecretService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http\DataResponse;
-use OCP\IConfig;
+use OCP\Config\IUserConfig;
 use OCP\IGroupManager;
 use OCP\IRequest;
 use OCP\IUserSession;
@@ -31,7 +31,7 @@ class GoogleAPIController extends Controller {
 	public function __construct(
 		string $appName,
 		IRequest $request,
-		private IConfig $config,
+		private IUserConfig $userConfig,
 		private IGroupManager $groupManager,
 		private IUserSession $userSession,
 		private GoogleContactsAPIService $googleContactsAPIService,
@@ -54,10 +54,10 @@ class GoogleAPIController extends Controller {
 			return new DataResponse([], 400);
 		}
 		return new DataResponse([
-			'importing_drive' => $this->config->getUserValue($this->userId, Application::APP_ID, 'importing_drive') === '1',
-			'last_drive_import_timestamp' => (int)$this->config->getUserValue($this->userId, Application::APP_ID, 'last_drive_import_timestamp', '0'),
-			'nb_imported_files' => (int)$this->config->getUserValue($this->userId, Application::APP_ID, 'nb_imported_files', '0'),
-			'drive_imported_size' => (int)$this->config->getUserValue($this->userId, Application::APP_ID, 'drive_imported_size', '0'),
+			'importing_drive' => $this->userConfig->getValueString($this->userId, Application::APP_ID, 'importing_drive', lazy: true) === '1',
+			'last_drive_import_timestamp' => $this->userConfig->getValueInt($this->userId, Application::APP_ID, 'last_drive_import_timestamp', lazy: true),
+			'nb_imported_files' => $this->userConfig->getValueInt($this->userId, Application::APP_ID, 'nb_imported_files', lazy: true),
+			'drive_imported_size' => $this->userConfig->getValueInt($this->userId, Application::APP_ID, 'drive_imported_size', lazy: true),
 		]);
 	}
 
@@ -95,9 +95,9 @@ class GoogleAPIController extends Controller {
 			$response = new DataResponse($result['error'], 401);
 		} else {
 			foreach ($result as $key => $cal) {
-				$isJobRegistered = $this->googleCalendarAPIService->
-					isJobRegisteredForCalendar($this->userId, $cal["id"]);
-				$result[$key]["isJobRegistered"] = $isJobRegistered;
+				$isJobRegistered = $this->googleCalendarAPIService
+					->isJobRegisteredForCalendar($this->userId, $cal['id']);
+				$result[$key]['isJobRegistered'] = $isJobRegistered;
 			}
 			$response = new DataResponse($result);
 		}
@@ -178,7 +178,7 @@ class GoogleAPIController extends Controller {
 		}
 		$this->googleCalendarAPIService->registerSyncCalendar(
 			$this->userId, $calId, $calName, $color);
-		$response = new DataResponse("OK", 200);
+		$response = new DataResponse('OK', 200);
 		return $response;
 	}
 
@@ -196,7 +196,7 @@ class GoogleAPIController extends Controller {
 		}
 		$this->googleCalendarAPIService->unregisterSyncCalendar(
 			$this->userId, $calId);
-		$response = new DataResponse("OK", 200);
+		$response = new DataResponse('OK', 200);
 		return $response;
 	}
 
@@ -211,12 +211,11 @@ class GoogleAPIController extends Controller {
 	 */
 	public function setSyncCalendar(string $calId, bool $desiredState, string $calName, ?string $color = null): DataResponse {
 
-
 		if ($this->accessToken === '') {
 			return new DataResponse('', 400);
 		}
 
-		if (true == $desiredState) {
+		if ($desiredState == true) {
 			return $this->registerSyncCalendar($calId, $calName, $color);
 		} else {
 			return $this->unregisterSyncCalendar($calId);

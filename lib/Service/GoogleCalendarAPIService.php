@@ -21,13 +21,13 @@ use OCA\DAV\CalDAV\CalDavBackend;
 use OCA\Google\AppInfo\Application;
 use OCA\Google\BackgroundJob\ImportCalendarJob;
 use OCP\BackgroundJob\IJobList;
-use OCP\IConfig;
+use OCP\Config\IUserConfig;
 use OCP\IL10N;
-
 use Ortic\ColorConverter\Color;
 use Ortic\ColorConverter\Colors\Named;
 use Psr\Log\LoggerInterface;
 use Sabre\DAV\Exception\BadRequest;
+use Sabre\DAV\PropPatch;
 use Sabre\VObject\Component\VCalendar;
 use Sabre\VObject\Component\VEvent;
 use Sabre\VObject\Reader;
@@ -50,7 +50,7 @@ class GoogleCalendarAPIService {
 		private CalDavBackend $caldavBackend,
 		private IJobList $jobList,
 		private GoogleAPIService $googleApiService,
-		private IConfig $config,
+		private IUserConfig $userConfig,
 	) {
 		$this->utcTimezone = new DateTimeZone('-0000');
 	}
@@ -313,8 +313,8 @@ class GoogleCalendarAPIService {
 		$startTime = microtime(true);
 		$this->logger->debug("Starting calendar import of $calId", ['app' => $this->appName]);
 
-		$lockFile = sys_get_temp_dir() .
-			"/nextcloud_google_synchronization_calendar_import_$calId.lock";
+		$lockFile = sys_get_temp_dir()
+			. "/nextcloud_google_synchronization_calendar_import_$calId.lock";
 
 		if (file_exists($lockFile)) {
 			throw new Exception('Could not acquire lock');
@@ -354,6 +354,9 @@ class GoogleCalendarAPIService {
 		$calendarIsNew = is_null($ncCalId);
 		if (is_null($ncCalId)) {
 			$ncCalId = $this->caldavBackend->createCalendar('principals/users/' . $userId, $newCalUri, $params);
+			// Ensures the right name is given to the calendar
+			$proppatch = new PropPatch(['{DAV:}displayname' => $newCalName]);
+			$this->caldavBackend->updateCalendar($ncCalId, $proppatch);
 		}
 
 		/** @var Set<string> $unseenURIs */
@@ -372,7 +375,7 @@ class GoogleCalendarAPIService {
 		}
 
 		date_default_timezone_set('UTC');
-		$allEvents = $this->config->getUserValue($userId, Application::APP_ID, 'consider_all_events', '1') === '1';
+		$allEvents = $this->userConfig->getValueString($userId, Application::APP_ID, 'consider_all_events', '1', lazy: true) === '1';
 		$eventsGenerator = $this->getCalendarEvents($userId, $calId, $allEvents);
 
 		// Normal events
@@ -487,7 +490,7 @@ class GoogleCalendarAPIService {
 		foreach ($this->jobList->getJobsIterator(ImportCalendarJob::class, null, 0) as $job) {
 			$args = $job->getArgument();
 
-			if ($args["user_id"] == $userId && $args["cal_id"] == $calId) {
+			if ($args['user_id'] == $userId && $args['cal_id'] == $calId) {
 				return true;
 			}
 		}
@@ -515,7 +518,7 @@ class GoogleCalendarAPIService {
 		foreach ($this->jobList->getJobsIterator(ImportCalendarJob::class, null, 0) as $job) {
 			$args = $job->getArgument();
 
-			if ($args["user_id"] == $argument["user_id"] && $args["cal_id"] == $argument["cal_id"]) {
+			if ($args['user_id'] == $argument['user_id'] && $args['cal_id'] == $argument['cal_id']) {
 				$job->setArgument($argument);
 				return;
 			}
@@ -539,7 +542,7 @@ class GoogleCalendarAPIService {
 			/** @var array{user_id: string, cal_id: string} $args */
 			$args = $job->getArgument();
 
-			if ($args["user_id"] == $userId && $args["cal_id"] == $calId) {
+			if ($args['user_id'] == $userId && $args['cal_id'] == $calId) {
 				$this->jobList->remove($job, $args);
 				return;
 			}
