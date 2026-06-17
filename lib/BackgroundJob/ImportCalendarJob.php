@@ -2,10 +2,9 @@
 
 namespace OCA\Google\BackgroundJob;
 
-use \OCP\AppFramework\Utility\ITimeFactory;
-use \OCP\BackgroundJob\TimedJob;
-
 use OCA\Google\Service\GoogleCalendarAPIService;
+use OCP\AppFramework\Utility\ITimeFactory;
+use OCP\BackgroundJob\TimedJob;
 
 class ImportCalendarJob extends TimedJob {
 
@@ -22,7 +21,7 @@ class ImportCalendarJob extends TimedJob {
 	 */
 	#[\Override]
 	protected function run($argument): void {
-		echo(date("Y-m-d H:i:s") . ' Importing ' . $argument['cal_name'] . '...');
+		echo(date('Y-m-d H:i:s') . ' Importing ' . $argument['cal_name'] . '...');
 		$result = $this->service->safeImportCalendar(
 			$argument['user_id'],
 			$argument['cal_id'],

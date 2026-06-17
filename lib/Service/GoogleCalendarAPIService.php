@@ -23,7 +23,6 @@ use OCA\Google\BackgroundJob\ImportCalendarJob;
 use OCP\BackgroundJob\IJobList;
 use OCP\Config\IUserConfig;
 use OCP\IL10N;
-
 use Ortic\ColorConverter\Color;
 use Ortic\ColorConverter\Colors\Named;
 use Psr\Log\LoggerInterface;
@@ -314,8 +313,8 @@ class GoogleCalendarAPIService {
 		$startTime = microtime(true);
 		$this->logger->debug("Starting calendar import of $calId", ['app' => $this->appName]);
 
-		$lockFile = sys_get_temp_dir() .
-			"/nextcloud_google_synchronization_calendar_import_$calId.lock";
+		$lockFile = sys_get_temp_dir()
+			. "/nextcloud_google_synchronization_calendar_import_$calId.lock";
 
 		if (file_exists($lockFile)) {
 			throw new Exception('Could not acquire lock');
@@ -491,7 +490,7 @@ class GoogleCalendarAPIService {
 		foreach ($this->jobList->getJobsIterator(ImportCalendarJob::class, null, 0) as $job) {
 			$args = $job->getArgument();
 
-			if ($args["user_id"] == $userId && $args["cal_id"] == $calId) {
+			if ($args['user_id'] == $userId && $args['cal_id'] == $calId) {
 				return true;
 			}
 		}
@@ -519,7 +518,7 @@ class GoogleCalendarAPIService {
 		foreach ($this->jobList->getJobsIterator(ImportCalendarJob::class, null, 0) as $job) {
 			$args = $job->getArgument();
 
-			if ($args["user_id"] == $argument["user_id"] && $args["cal_id"] == $argument["cal_id"]) {
+			if ($args['user_id'] == $argument['user_id'] && $args['cal_id'] == $argument['cal_id']) {
 				$job->setArgument($argument);
 				return;
 			}
@@ -543,7 +542,7 @@ class GoogleCalendarAPIService {
 			/** @var array{user_id: string, cal_id: string} $args */
 			$args = $job->getArgument();
 
-			if ($args["user_id"] == $userId && $args["cal_id"] == $calId) {
+			if ($args['user_id'] == $userId && $args['cal_id'] == $calId) {
 				$this->jobList->remove($job, $args);
 				return;
 			}

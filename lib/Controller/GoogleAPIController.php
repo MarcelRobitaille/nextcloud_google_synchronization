@@ -19,8 +19,8 @@ use OCA\Google\Service\GoogleDriveAPIService;
 use OCA\Google\Service\SecretService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http\DataResponse;
-use OCP\IGroupManager;
 use OCP\Config\IUserConfig;
+use OCP\IGroupManager;
 use OCP\IRequest;
 use OCP\IUserSession;
 
@@ -95,9 +95,9 @@ class GoogleAPIController extends Controller {
 			$response = new DataResponse($result['error'], 401);
 		} else {
 			foreach ($result as $key => $cal) {
-				$isJobRegistered = $this->googleCalendarAPIService->
-					isJobRegisteredForCalendar($this->userId, $cal["id"]);
-				$result[$key]["isJobRegistered"] = $isJobRegistered;
+				$isJobRegistered = $this->googleCalendarAPIService
+					->isJobRegisteredForCalendar($this->userId, $cal['id']);
+				$result[$key]['isJobRegistered'] = $isJobRegistered;
 			}
 			$response = new DataResponse($result);
 		}
@@ -178,7 +178,7 @@ class GoogleAPIController extends Controller {
 		}
 		$this->googleCalendarAPIService->registerSyncCalendar(
 			$this->userId, $calId, $calName, $color);
-		$response = new DataResponse("OK", 200);
+		$response = new DataResponse('OK', 200);
 		return $response;
 	}
 
@@ -196,7 +196,7 @@ class GoogleAPIController extends Controller {
 		}
 		$this->googleCalendarAPIService->unregisterSyncCalendar(
 			$this->userId, $calId);
-		$response = new DataResponse("OK", 200);
+		$response = new DataResponse('OK', 200);
 		return $response;
 	}
 
@@ -211,12 +211,11 @@ class GoogleAPIController extends Controller {
 	 */
 	public function setSyncCalendar(string $calId, bool $desiredState, string $calName, ?string $color = null): DataResponse {
 
-
 		if ($this->accessToken === '') {
 			return new DataResponse('', 400);
 		}
 
-		if (true == $desiredState) {
+		if ($desiredState == true) {
 			return $this->registerSyncCalendar($calId, $calName, $color);
 		} else {
 			return $this->unregisterSyncCalendar($calId);
