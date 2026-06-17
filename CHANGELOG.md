@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [4.2.0] - 2026-06-17
+
+### Changed
+
+- Use lazy loading for config and stop using deprecated IConfig and added support for Nextcloud 33 #305 @lukasdotcom
+
+### Fixed
+
+- Fix type conflict exception for user config #348 @lukasdotcom
+- Fix download limit handling #345 @lukasdotcom
+- Fix calendar display name #342 @lukasdotcom
+- Fix undefined variable `rootSharedWithMeImportFolder` #313 @lukasdotcom
+- Allow cancelling an already running drive import job # 286 @Bungeefan
+
 ## [4.1.0] - 2025-10-25
 
 ### Added
