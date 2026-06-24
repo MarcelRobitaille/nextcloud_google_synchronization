@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Do not wipe the whole calendar when fetching events from Google fails. A transient error (expired token / 401, DNS failure, 5xx, rate limiting) made the events list come back empty, which was interpreted as "everything was deleted in Google" and removed every local event. The import now aborts on a fetch error instead of deleting. @IT-BAER
+
 ## [4.2.0] - 2026-06-17
 
 ### Changed

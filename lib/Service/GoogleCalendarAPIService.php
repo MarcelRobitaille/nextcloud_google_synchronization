@@ -338,7 +338,7 @@ class GoogleCalendarAPIService {
 	 * @param string $calId
 	 * @param string $calName
 	 * @param ?string $color
-	 * @return array{nbAdded: int, nbUpdated: int, calName: string}
+	 * @return array{error: string}|array{nbAdded: int, nbUpdated: int, calName: string}
 	 */
 	public function importCalendar(string $userId, string $calId, string $calName, ?string $color = null): array {
 		$params = [];
@@ -389,6 +389,20 @@ class GoogleCalendarAPIService {
 			} else {
 				array_push($events, $e);
 			}
+		}
+
+		// If fetching the events from Google failed, the generator yields nothing
+		// and returns an error. Aborting here is essential: otherwise the empty
+		// result is interpreted as "every event was deleted in Google" and the
+		// deletion loop below wipes the entire calendar on a transient failure
+		// (expired token / 401, DNS hiccup, 5xx, rate limiting, ...).
+		$eventGeneratorReturn = $eventsGenerator->getReturn();
+		if (isset($eventGeneratorReturn['error'])) {
+			$this->logger->warning(
+				'Aborting calendar import for "' . $calId . '" because fetching events failed: ' . $eventGeneratorReturn['error'],
+				['app' => Application::APP_ID],
+			);
+			return $eventGeneratorReturn;
 		}
 
 		$nbAdded = 0;
@@ -462,10 +476,6 @@ class GoogleCalendarAPIService {
 			$this->caldavBackend->deleteCalendarObject($ncCalId, $uri, $this->caldavBackend::CALENDAR_TYPE_CALENDAR, true);
 		}
 
-		$eventGeneratorReturn = $eventsGenerator->getReturn();
-		if (isset($eventGeneratorReturn['error'])) {
-			/* return $eventGeneratorReturn; */
-		}
 		return [
 			'nbAdded' => $nbAdded,
 			'nbUpdated' => $nbUpdated,
