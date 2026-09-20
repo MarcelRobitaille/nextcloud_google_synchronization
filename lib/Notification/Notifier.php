@@ -12,12 +12,12 @@
 
 namespace OCA\Google\Notification;
 
-use InvalidArgumentException;
 use OCA\Google\AppInfo\Application;
 use OCP\IURLGenerator;
 use OCP\L10N\IFactory;
 use OCP\Notification\INotification;
 use OCP\Notification\INotifier;
+use OCP\Notification\UnknownNotificationException;
 
 class Notifier implements INotifier {
 
@@ -50,18 +50,29 @@ class Notifier implements INotifier {
 	 * @param INotification $notification
 	 * @param string $languageCode The code of the language that should be used to prepare the notification
 	 * @return INotification
-	 * @throws InvalidArgumentException When the notification was not prepared by a notifier
+	 * @throws UnknownNotificationException When the notification was not prepared by a notifier
 	 * @since 9.0.0
 	 */
 	public function prepare(INotification $notification, string $languageCode): INotification {
 		if ($notification->getApp() !== 'google_synchronization') {
 			// Not my app => throw
-			throw new InvalidArgumentException();
+			throw new UnknownNotificationException();
 		}
 
 		$l = $this->factory->get('google_synchronization', $languageCode);
 
 		switch ($notification->getSubject()) {
+			case 'import_photos_finished':
+				/** @var array{nbImported?:string, targetPath: string} $p */
+				$p = $notification->getSubjectParameters();
+				$nbImported = (int)($p['nbImported'] ?? 0);
+				$targetPath = $p['targetPath'];
+				$content = $l->n('%n photo was imported from Google.', '%n photos were imported from Google.', $nbImported);
+
+				$notification->setParsedSubject($content)
+					->setIcon($this->url->getAbsoluteURL($this->url->imagePath(Application::APP_ID, 'app-dark.svg')))
+					->setLink($this->url->linkToRouteAbsolute('files.view.index', ['dir' => $targetPath]));
+				return $notification;
 			case 'import_drive_finished':
 				/** @var array{nbImported?:string, targetPath: string} $p */
 				$p = $notification->getSubjectParameters();
@@ -75,7 +86,7 @@ class Notifier implements INotifier {
 				return $notification;
 			default:
 				// Unknown subject => Unknown notification => throw
-				throw new InvalidArgumentException();
+				throw new UnknownNotificationException();
 		}
 	}
 }

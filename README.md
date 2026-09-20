@@ -75,6 +75,7 @@ This also allows me to decide for myself if my releases are major, minor, or pat
 
 | Google Synchronization version | Google Integration version |
 | ------------------------------ | -------------------------- |
+| 4.3.0                          | 4.4.0                      |
 | 4.2.0                          | 4.3.1                      |
 | 4.1.0                          | 4.2.0                      |
 | 4.0.1                          | 4.1.0                      |
@@ -102,8 +103,8 @@ If there is a strong business case for any development of this app, we will cons
 
 ## Limitations
 
-This app can not migrate Google photos files due to limitations in the Google Photos API making it too complex for end users.
-For more information please visit [the Google Photos Documentation.](https://developers.google.com/photos/support/updates#affected-scopes-methods)
+- Google Photos import is selection-based and does not import an entire library automatically. It is limited to 2000 items per import session, and users must manually select which photos and videos to import.
+- Google does not provide location data for imported photos and imported videos may be lower quality than the original files provided in Google Photos.
 
 ## Development guide
 

@@ -25,6 +25,11 @@ return [
 		['name' => 'googleAPI#setSyncCalendar', 'url' => '/set-sync-calendar', 'verb' => 'GET'],
 		['name' => 'googleAPI#resetRegisteredSyncCalendar', 'url' => '/reset-sync-calendar', 'verb' => 'DELETE'],
 		['name' => 'googleAPI#importContacts', 'url' => '/import-contacts', 'verb' => 'GET'],
+		['name' => 'googleAPI#createPickerSession', 'url' => '/picker-session', 'verb' => 'POST'],
+		['name' => 'googleAPI#getPickerSession', 'url' => '/picker-session', 'verb' => 'GET'],
+		['name' => 'googleAPI#deletePickerSession', 'url' => '/picker-session', 'verb' => 'DELETE'],
+		['name' => 'googleAPI#importPhotos', 'url' => '/import-photos', 'verb' => 'POST'],
+		['name' => 'googleAPI#getImportPhotosInformation', 'url' => '/import-photos-info', 'verb' => 'GET'],
 		['name' => 'googleAPI#importDrive', 'url' => '/import-files', 'verb' => 'GET'],
 		['name' => 'googleAPI#getImportDriveInformation', 'url' => '/import-files-info', 'verb' => 'GET'],
 	]
