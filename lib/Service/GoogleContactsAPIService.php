@@ -16,6 +16,7 @@ use DateTime;
 use Ds\Set;
 use Exception;
 use Generator;
+/** @psalm-suppress UndefinedClass */
 use OCA\DAV\CardDAV\CardDavBackend;
 use OCA\Google\AppInfo\Application;
 use OCA\Google\BackgroundJob\ImportContactsJob;
@@ -31,6 +32,7 @@ require_once __DIR__ . '/../../vendor/autoload.php';
 /**
  * Service to make requests to Google v3 (JSON) API
  */
+/** @psalm-suppress UndefinedClass */
 class GoogleContactsAPIService {
 
 	/**
@@ -43,6 +45,7 @@ class GoogleContactsAPIService {
 		protected string $appName,
 		private LoggerInterface $logger,
 		private IContactManager $contactsManager,
+		/** @psalm-suppress PropertyNotSetInConstructor */
 		private CardDavBackend $cdBackend,
 		private GoogleAPIService $googleApiService,
 		private IUserConfig $userConfig,
@@ -610,7 +613,7 @@ class GoogleContactsAPIService {
 			}
 			return $result;
 		} finally {
-			$this->logger->debug('Elapsed time is: ' . (microtime(true) - $startTime) . ' seconds', ['app' => $this->appName]);
+			$this->logger->debug('Elapsed time is: ' . (string)(microtime(true) - $startTime) . ' seconds', ['app' => $this->appName]);
 			try {
 				unlink($lockFile);
 			} catch (Exception) {
@@ -652,7 +655,7 @@ class GoogleContactsAPIService {
 	 * @param ?string $uri
 	 * @param int $key
 	 * @param ?string $newAddrBookName
-	 * @return array{error: string}|null null on success
+	 * @return array{error: string, key?: int, uri?: string, name?: string, exists?: bool}|null
 	 */
 	public function registerSyncContacts(string $userId, ?string $uri, int $key, ?string $newAddrBookName): ?array {
 		$addressBook = $this->getOrCreateAddressBook($userId, $uri, $key, $newAddrBookName);

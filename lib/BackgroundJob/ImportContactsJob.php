@@ -41,7 +41,7 @@ class ImportContactsJob extends TimedJob {
 		if (isset($result['error'])) {
 			echo(' error: ' . $result['error'] . PHP_EOL);
 		} else {
-			echo(' done. Added ' . $result['nbAdded'] . ', updated ' . $result['nbUpdated'] . PHP_EOL);
+			echo(" done. Added ${result['nbAdded']}, updated ${result['nbUpdated']}" . PHP_EOL);
 		}
 	}
 }

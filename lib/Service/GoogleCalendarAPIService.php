@@ -338,7 +338,7 @@ class GoogleCalendarAPIService {
 	 * @param string $calId
 	 * @param string $calName
 	 * @param ?string $color
-	 * @return array{nbAdded: int, nbUpdated: int, calName: string}
+	 * @return array{nbAdded: int, nbUpdated: int, calName: string} | array{error: string}
 	 */
 	public function importCalendar(string $userId, string $calId, string $calName, ?string $color = null): array {
 		$params = [];
