@@ -326,12 +326,14 @@ class GoogleAPIController extends Controller {
 	/**
 	 * @return DataResponse
 	 */
-	public function resetRegisteredSyncCalendar(): DataResponse {
+	public function deleteBackgroundJobs(): DataResponse {
 		if (!$this->userSession->isLoggedIn() || !$this->groupManager->isAdmin($this->userSession->getUser()->getUID())) {
 			return new DataResponse('You must be a server admin to perform this action.', 401);
 		}
 
-		$this->googleCalendarAPIService->resetRegisteredSyncCalendar();
+		$this->googleCalendarAPIService->deleteBackgroundJobs();
+		$this->googleContactsAPIService->deleteBackgroundJobs();
+
 		return new DataResponse('OK', 200);
 	}
 
@@ -355,5 +357,62 @@ class GoogleAPIController extends Controller {
 			$response = new DataResponse($result);
 		}
 		return $response;
+	}
+
+	/**
+	 * @NoAdminRequired
+	 *
+	 * @param ?string $uri
+	 * @param int $key
+	 * @param ?string $newAddressBookName
+	 * @return DataResponse
+	 */
+	public function registerSyncContacts(?string $uri = '', int $key = 0, ?string $newAddressBookName = ''): DataResponse {
+		if ($this->accessToken === '' || $this->userId === null) {
+			return new DataResponse('', 400);
+		}
+		/** @var array{error?:string}|null $result */
+		$result = $this->googleContactsAPIService->registerSyncContacts(
+			$this->userId, $uri, $key, $newAddressBookName);
+		if ($result !== null) {
+			return new DataResponse($result['error'], 401);
+		}
+		return new DataResponse('OK', 200);
+	}
+
+	/**
+	 * @NoAdminRequired
+	 *
+	 * @param int $key
+	 * @return DataResponse
+	 */
+	public function unregisterSyncContacts(int $key): DataResponse {
+		if ($this->accessToken === '' || $this->userId === null) {
+			return new DataResponse('', 400);
+		}
+		$this->googleContactsAPIService->unregisterSyncContacts(
+			$this->userId, $key);
+		return new DataResponse('OK', 200);
+	}
+
+	/**
+	 * @NoAdminRequired
+	 *
+	 * @param ?string $uri
+	 * @param int $key
+	 * @param bool $desiredState
+	 * @param ?string $newAddressBookName
+	 * @return DataResponse
+	 */
+	public function setSyncContacts(?string $uri = '', int $key = 0, bool $desiredState = false, ?string $newAddressBookName = ''): DataResponse {
+		if ($this->accessToken === '') {
+			return new DataResponse('', 400);
+		}
+
+		if ($desiredState) {
+			return $this->registerSyncContacts($uri, $key, $newAddressBookName);
+		} else {
+			return $this->unregisterSyncContacts($key);
+		}
 	}
 }

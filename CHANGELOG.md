@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ### Added
 
 - feat(photos): Add Google Photos import via Picker API #356 @AhsanIsEpic
+- feat(contacts): Add support for continuous synchronization of contacts (as well as calendars) #5 @MarcelRobitaille
 
 ### Changed
 

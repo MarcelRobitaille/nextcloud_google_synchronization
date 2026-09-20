@@ -16,6 +16,7 @@ use DateTime;
 use Exception;
 use OCA\Google\AppInfo\Application;
 use OCA\Google\Service\GoogleAPIService;
+use OCA\Google\Service\GoogleContactsAPIService;
 use OCA\Google\Service\GoogleDriveAPIService;
 use OCA\Google\Service\GooglePhotosAPIService;
 use OCA\Google\Service\SecretService;
@@ -56,6 +57,7 @@ class ConfigController extends Controller {
 		private IContactManager $contactsManager,
 		private IInitialState $initialStateService,
 		private GoogleAPIService $googleApiService,
+		private GoogleContactsAPIService $googleContactsApiService,
 		private GoogleDriveAPIService $googleDriveApiService,
 		private GooglePhotosAPIService $googlePhotosApiService,
 		private ?string $userId,
@@ -150,6 +152,8 @@ class ConfigController extends Controller {
 						'uri' => $ab->getUri(),
 						'name' => $ab->getDisplayName(),
 						'canEdit' => $canEdit,
+						'isSyncRegistered' => $this->userId !== null
+							&& $this->googleContactsApiService->isJobRegisteredForAddressBook($this->userId, intval($ab->getKey())),
 					];
 				}
 			} catch (Exception|Throwable $e) {

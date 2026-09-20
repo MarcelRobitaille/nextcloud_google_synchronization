@@ -476,7 +476,7 @@ class GoogleCalendarAPIService {
 	/**
 	 * Delete all the registered calendar sync jobs from the database.
 	 */
-	public function resetRegisteredSyncCalendar(): void {
+	public function deleteBackgroundJobs(): void {
 		$this->jobList->remove(ImportCalendarJob::class);
 	}
 
