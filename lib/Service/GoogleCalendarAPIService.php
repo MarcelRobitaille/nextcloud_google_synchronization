@@ -456,16 +456,19 @@ class GoogleCalendarAPIService {
 			}
 		}
 
+		// Check for error after exhausting the generator but before deleting unseen items.
+		$eventGeneratorReturn = $eventsGenerator->getReturn();
+		if (isset($eventGeneratorReturn['error'])) {
+			$this->logger->error('Google Calendar API error: ' . $eventGeneratorReturn['error'], ['app' => Application::APP_ID]);
+			return [ 'error' => $eventGeneratorReturn['error'] ];
+		}
+
 		// Anything still unseen was deleted in Google Calendar
 		// Reflect that here
 		foreach ($unseenURIs as $uri) {
 			$this->caldavBackend->deleteCalendarObject($ncCalId, $uri, $this->caldavBackend::CALENDAR_TYPE_CALENDAR, true);
 		}
 
-		$eventGeneratorReturn = $eventsGenerator->getReturn();
-		if (isset($eventGeneratorReturn['error'])) {
-			/* return $eventGeneratorReturn; */
-		}
 		return [
 			'nbAdded' => $nbAdded,
 			'nbUpdated' => $nbUpdated,

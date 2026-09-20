@@ -241,8 +241,9 @@ class GoogleContactsAPIService {
 		$addressBook = $this->getOrCreateAddressBook($userId, $uri, $key, $newAddrBookName);
 
 		if (isset($addressBook['error'])) {
-			return $addressBook;
+			return [ 'error' => $addressBook['error'] ];
 		}
+
 		$key = $addressBook['key'];
 		$hasExistingAddressBook = $addressBook['exists'];
 		$otherContacts = $this->userConfig->getValueString($userId, Application::APP_ID, 'consider_other_contacts', '0', lazy: true) === '1';
@@ -264,6 +265,7 @@ class GoogleContactsAPIService {
 		$nbUpdated = 0;
 		$nbDeleted = 0;
 		$totalContactNumber = 0;
+
 		foreach ($contacts as $c) {
 			$totalContactNumber++;
 
@@ -544,6 +546,13 @@ class GoogleContactsAPIService {
 			}
 		}
 
+		// Check for error after exhausting the generator but before deleting unseen items.
+		$contactGeneratorReturn = $contacts->getReturn();
+		if (isset($contactGeneratorReturn['error'])) {
+			$this->logger->error('Google Contacts API error: ' . $contactGeneratorReturn['error'], ['app' => Application::APP_ID]);
+			return [ 'error' => $contactGeneratorReturn['error'] ];
+		}
+
 		// Anything still unseen was deleted in Google Contacts
 		// Reflect that here, but only for cards we created (namespaced URIs)
 		foreach ($unseenURIs as $uri) {
@@ -557,11 +566,7 @@ class GoogleContactsAPIService {
 
 		$this->logger->debug($totalContactNumber . ' contacts seen', ['app' => Application::APP_ID]);
 		$this->logger->debug($nbAdded . ' contacts imported', ['app' => Application::APP_ID]);
-		$contactGeneratorReturn = $contacts->getReturn();
 
-		if (isset($contactGeneratorReturn['error'])) {
-			return $contactGeneratorReturn;
-		}
 		return [
 			'nbSeen' => $totalContactNumber,
 			'nbAdded' => $nbAdded,

@@ -709,13 +709,14 @@ export default {
 					const nbSeen = response.data.nbSeen
 					const nbAdded = response.data.nbAdded
 					const nbUpdated = response.data.nbUpdated
+					const nbDeleted = response.data.nbDeleted ?? 0
 					showSuccess(
 						this.n(
 							'google_synchronization',
-							'{nbSeen} Google contact seen. {nbAdded} added, {nbUpdated} updated in {name}',
-							'{nbSeen} Google contacts seen. {nbAdded} added, {nbUpdated} updated in {name}',
+							'{nbSeen} Google contact seen. {nbAdded} added, {nbUpdated} updated, {nbDeleted} deleted in {name}',
+							'{nbSeen} Google contacts seen. {nbAdded} added, {nbUpdated} updated, {nbDeleted} deleted in {name}',
 							nbSeen,
-							{ nbAdded, nbSeen, nbUpdated, name: this.selectedAddressBookName },
+							{ nbAdded, nbSeen, nbUpdated, nbDeleted, name: this.selectedAddressBookName },
 						),
 					)
 					this.showAddressBooks = false
@@ -723,11 +724,11 @@ export default {
 				})
 				.catch((error) => {
 					showServerError(
-						error,
-						t('google_synchronization', 'Failed to get address book list'),
+						error.response.data?.error ?? error,
+						t('google_synchronization', 'Failed to import contacts'),
 					)
 				})
-				.then(() => {
+				.finally(() => {
 					this.importingContacts = false
 				})
 		},
@@ -760,11 +761,11 @@ export default {
 				})
 				.catch((error) => {
 					showServerError(
-						error,
+						error.response.data?.error ?? error,
 						t('google_synchronization', 'Failed to import Google calendar'),
 					)
 				})
-				.then(() => {
+				.finally(() => {
 					this.importingCalendar[calId] = false
 				})
 		},

@@ -258,7 +258,7 @@ class GoogleAPIController extends Controller {
 		/** @var array{error?:string} $result */
 		$result = $this->googleCalendarAPIService->importCalendar($this->userId, $calId, $calName, $color);
 		if (isset($result['error'])) {
-			$response = new DataResponse($result['error'], 401);
+			$response = new DataResponse($result, 401);
 		} else {
 			$response = new DataResponse($result);
 		}
@@ -352,7 +352,7 @@ class GoogleAPIController extends Controller {
 		/** @var array{error?:string} $result */
 		$result = $this->googleContactsAPIService->importContacts($this->userId, $uri, $key, $newAddressBookName);
 		if (isset($result['error'])) {
-			$response = new DataResponse($result['error'], 401);
+			$response = new DataResponse($result, 401);
 		} else {
 			$response = new DataResponse($result);
 		}

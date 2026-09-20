@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ### Fixed
 
 - Fix: throw UnknownActivityException on Notifier #358 @lukasdotcom
+- Fix: don't wipe calendar on Google API error and improve error messages #51 @MarcelRobitaille
 
 ## [4.2.0] - 2026-06-17
 

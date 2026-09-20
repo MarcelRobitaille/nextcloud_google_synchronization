@@ -58,6 +58,11 @@ export function showServerError(error, message) {
 	// in GitHub issues.
 	console.error(error)
 
+	if (typeof error === 'string') {
+		showError(`${message}: ${error}`)
+		return
+	}
+
 	const summary = t('google_synchronization', 'Details')
 	const details = getDetails(error)
 
