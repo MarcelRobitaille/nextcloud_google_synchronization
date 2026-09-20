@@ -13,28 +13,44 @@
 namespace OCA\Google\Service;
 
 use DateTime;
+use Ds\Set;
 use Exception;
 use Generator;
+/** @psalm-suppress UndefinedClass */
 use OCA\DAV\CardDAV\CardDavBackend;
 use OCA\Google\AppInfo\Application;
+use OCA\Google\BackgroundJob\ImportContactsJob;
+use OCP\BackgroundJob\IJobList;
 use OCP\Config\IUserConfig;
 use OCP\Contacts\IManager as IContactManager;
 use Psr\Log\LoggerInterface;
 use Sabre\VObject\Component\VCard;
 use Throwable;
 
+require_once __DIR__ . '/../../vendor/autoload.php';
+
 /**
  * Service to make requests to Google v3 (JSON) API
  */
+/** @psalm-suppress UndefinedClass */
 class GoogleContactsAPIService {
 
+	/**
+	 * Card URI prefix used for cards created by this app so they can be
+	 * distinguished from other cards in the address book (e.g. for deletion).
+	 */
+	private const GOOGLE_CARD_URI_PREFIX = 'google_contact_';
+
 	public function __construct(
-		string $appName,
+		protected string $appName,
 		private LoggerInterface $logger,
 		private IContactManager $contactsManager,
+		/** @psalm-suppress PropertyNotSetInConstructor */
 		private CardDavBackend $cdBackend,
 		private GoogleAPIService $googleApiService,
 		private IUserConfig $userConfig,
+		private IJobList $jobList,
+		private UserScopeService $userScopeService,
 	) {
 	}
 
@@ -170,48 +186,90 @@ class GoogleContactsAPIService {
 	}
 
 	/**
+	 * Resolve the address book the import should target, creating it if
+	 * requested.
+	 *
+	 * @param string $userId
+	 * @param ?string $uri
+	 * @param int $key
+	 * @param ?string $newAddrBookName
+	 * @return array{key: int, uri: string, name: string, exists: bool}|array{error: string}
+	 */
+	private function getOrCreateAddressBook(string $userId, ?string $uri, int $key, ?string $newAddrBookName): array {
+		if ($newAddrBookName === null || $newAddrBookName === '') {
+			$newAddrBookName = 'Google Contacts import';
+		}
+		$addressBooks = $this->contactsManager->getUserAddressBooks();
+		if ($key === 0) {
+			foreach ($addressBooks as $ab) {
+				if ($ab->getDisplayName() === $newAddrBookName) {
+					return [
+						'key' => intval($ab->getKey()),
+						'uri' => $ab->getUri(),
+						'name' => $ab->getDisplayName(),
+						'exists' => true,
+					];
+				}
+			}
+			$key = $this->cdBackend->createAddressBook('principals/users/' . $userId, $newAddrBookName, []);
+			return [
+				'key' => $key,
+				'uri' => $newAddrBookName,
+				'name' => $newAddrBookName,
+				'exists' => false,
+			];
+		}
+		// existing address book, check if it exists
+		foreach ($addressBooks as $ab) {
+			if ($ab->getUri() === $uri && intval($ab->getKey()) === $key) {
+				return [
+					'key' => $key,
+					'uri' => $ab->getUri(),
+					'name' => $ab->getDisplayName(),
+					'exists' => true,
+				];
+			}
+		}
+		return ['error' => 'no such address book'];
+	}
+
+	/**
 	 * @param string $userId
 	 * @param ?string $uri
 	 * @param int $key
 	 * @param ?string $newAddrBookName
 	 * @return array
 	 */
-	public function importContacts(string $userId, ?string $uri, int $key, ?string $newAddrBookName): array {
-		$existingAddressBook = null;
-		if ($key === 0) {
-			$addressBooks = $this->contactsManager->getUserAddressBooks();
-			foreach ($addressBooks as $k => $ab) {
-				if ($ab->getDisplayName() === $newAddrBookName) {
-					$key = intval($ab->getKey());
-					break;
-				}
-			}
-			if ($key === 0) {
-				$key = $this->cdBackend->createAddressBook('principals/users/' . $userId, $newAddrBookName, []);
-			}
-		} else {
-			// existing address book
-			// check if it exists
-			$addressBooks = $this->contactsManager->getUserAddressBooks();
-			$addressBook = null;
-			foreach ($addressBooks as $k => $ab) {
-				if ($ab->getUri() === $uri && intval($ab->getKey()) === $key) {
-					$addressBook = $ab;
-					break;
-				}
-			}
-			if (!$addressBook) {
-				return ['error' => 'no such address book'];
-			}
-			$existingAddressBook = $addressBook;
+	public function importContacts(string $userId, ?string $uri, int $key, ?string $newAddrBookName, bool $deleteRemoved = false): array {
+		$addressBook = $this->getOrCreateAddressBook($userId, $uri, $key, $newAddrBookName);
+
+		if (isset($addressBook['error'])) {
+			return [ 'error' => $addressBook['error'] ];
 		}
+
+		$key = $addressBook['key'];
+		$hasExistingAddressBook = $addressBook['exists'];
 		$otherContacts = $this->userConfig->getValueString($userId, Application::APP_ID, 'consider_other_contacts', '0', lazy: true) === '1';
+
+		/** @var Set<string> $unseenURIs */
+		$unseenURIs = new Set();
+		if ($deleteRemoved) {
+			foreach ($this->cdBackend->getCards($key) as $card) {
+				$cardUri = $card['uri'] ?? '';
+				if (str_starts_with($cardUri, self::GOOGLE_CARD_URI_PREFIX)) {
+					$unseenURIs->add($cardUri);
+				}
+			}
+		}
+
 		$groupsById = $this->getContactGroupsById($userId);
 		$contacts = $this->getContactList($userId, $otherContacts);
 		$nbAdded = 0;
 		$nbUpdated = 0;
+		$nbDeleted = 0;
 		$totalContactNumber = 0;
-		foreach ($contacts as $k => $c) {
+
+		foreach ($contacts as $c) {
 			$totalContactNumber++;
 
 			$googleResourceName = $c['resourceName'] ?? null;
@@ -221,11 +279,19 @@ class GoogleContactsAPIService {
 			}
 			// contacts are not displayed in the Contacts app if there are slashes in their URI...
 			$googleResourceName = str_replace('/', '_', $googleResourceName);
+			// Our own URI scheme so we know which cards belong to this app
+			$objectUri = self::GOOGLE_CARD_URI_PREFIX . $googleResourceName;
+			// This contact still exists in Google, keep its card around
+			$unseenURIs->remove($objectUri);
 
 			// check if contact exists and needs to be updated
 			$existingContact = null;
-			if ($existingAddressBook !== null) {
-				$existingContact = $this->cdBackend->getCard($key, $googleResourceName);
+			if ($hasExistingAddressBook) {
+				$existingContact = $this->cdBackend->getCard($key, $objectUri);
+				// migrate cards created under the legacy people_* scheme
+				if (!$existingContact) {
+					$existingContact = $this->cdBackend->getCard($key, $googleResourceName);
+				}
 				if ($existingContact) {
 					$googleUpdateTime = $c['metadata']['sources'][0]['updateTime'] ?? null;
 					if ($googleUpdateTime === null) {
@@ -468,30 +534,172 @@ class GoogleContactsAPIService {
 
 			if ($existingContact === null || $existingContact === false) {
 				try {
-					$this->cdBackend->createCard($key, $googleResourceName, $vCard->serialize());
+					$this->cdBackend->createCard($key, $objectUri, $vCard->serialize());
 					$nbAdded++;
 				} catch (Throwable|Exception $e) {
 					$this->logger->warning('Error when creating contact', ['exception' => $e, 'contact' => $c, 'app' => Application::APP_ID]);
 				}
 			} else {
 				try {
-					$this->cdBackend->updateCard($key, $googleResourceName, $vCard->serialize());
+					$this->cdBackend->updateCard($key, $existingContact['uri'] ?? $objectUri, $vCard->serialize());
 					$nbUpdated++;
 				} catch (Throwable|Exception $e) {
 					$this->logger->warning('Error when updating contact', ['exception' => $e, 'contact' => $c, 'app' => Application::APP_ID]);
 				}
 			}
 		}
-		$this->logger->debug($totalContactNumber . ' contacts seen', ['app' => Application::APP_ID]);
-		$this->logger->debug($nbAdded . ' contacts imported', ['app' => Application::APP_ID]);
+
+		// Check for error after exhausting the generator but before deleting unseen items.
 		$contactGeneratorReturn = $contacts->getReturn();
 		if (isset($contactGeneratorReturn['error'])) {
-			return $contactGeneratorReturn;
+			$this->logger->error('Google Contacts API error: ' . $contactGeneratorReturn['error'], ['app' => Application::APP_ID]);
+			return [ 'error' => $contactGeneratorReturn['error'] ];
 		}
+
+		// Anything still unseen was deleted in Google Contacts
+		// Reflect that here, but only for cards we created (namespaced URIs)
+		foreach ($unseenURIs as $uri) {
+			try {
+				$this->cdBackend->deleteCard($key, $uri);
+				$nbDeleted++;
+			} catch (Throwable|Exception $e) {
+				$this->logger->warning('Error when deleting contact', ['exception' => $e, 'app' => Application::APP_ID]);
+			}
+		}
+
+		$this->logger->debug($totalContactNumber . ' contacts seen', ['app' => Application::APP_ID]);
+		$this->logger->debug($nbAdded . ' contacts imported', ['app' => Application::APP_ID]);
+
 		return [
 			'nbSeen' => $totalContactNumber,
 			'nbAdded' => $nbAdded,
 			'nbUpdated' => $nbUpdated,
+			'nbDeleted' => $nbDeleted,
 		];
+	}
+
+	/**
+	 * Import contacts with a lock to prevent concurrent runs, and set the user
+	 * scope since this can be called from a background job.
+	 *
+	 * @param string $userId
+	 * @param ?string $uri
+	 * @param int $key
+	 * @param ?string $newAddrBookName
+	 * @return array{error: string}|array{nbSeen: int, nbAdded: int, nbUpdated: int, nbDeleted: int}
+	 */
+	public function safeImportContacts(string $userId, ?string $uri, int $key, ?string $newAddrBookName): array {
+		$startTime = microtime(true);
+		$this->logger->debug("Starting contacts import in address book $key", ['app' => $this->appName]);
+
+		$lockFile = sys_get_temp_dir()
+			. "/nextcloud_google_synchronization_contacts_import_$key.lock";
+
+		if (file_exists($lockFile)) {
+			throw new Exception('Could not acquire lock');
+		}
+
+		touch($lockFile);
+
+		try {
+			// Background jobs don't run in a user session, set the scope so
+			// address book operations resolve to the right user
+			$this->userScopeService->setUserScope($userId);
+			$this->userScopeService->setFilesystemScope($userId);
+			$result = $this->importContacts($userId, $uri, $key, $newAddrBookName, true);
+			if (isset($result['error']) && $result['error'] === 'no such address book') {
+				// the synced address book was deleted, drop the job
+				$this->unregisterSyncContacts($userId, $key);
+			}
+			return $result;
+		} finally {
+			$this->logger->debug('Elapsed time is: ' . (string)(microtime(true) - $startTime) . ' seconds', ['app' => $this->appName]);
+			try {
+				unlink($lockFile);
+			} catch (Exception) {
+			}
+		}
+	}
+
+	/**
+	 * Delete all the registered contacts sync jobs from the database.
+	 */
+	public function deleteBackgroundJobs(): void {
+		$this->jobList->remove(ImportContactsJob::class);
+	}
+
+	/**
+	 * Check if a background job is registered.
+	 *
+	 * @param string $userId The user id of the job.
+	 * @param int $key The address book key of the job.
+	 * @return bool Whether the job with the given parameters is registered.
+	 */
+	public function isJobRegisteredForAddressBook(string $userId, int $key): bool {
+		foreach ($this->jobList->getJobsIterator(ImportContactsJob::class, null, 0) as $job) {
+			$args = $job->getArgument();
+
+			if ($args['user_id'] == $userId && $args['address_book_key'] == $key) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Register an address book to periodically be synced and kept up to date in
+	 * the background.
+	 *
+	 * @param string $userId
+	 * @param ?string $uri
+	 * @param int $key
+	 * @param ?string $newAddrBookName
+	 * @return array{error: string, key?: int, uri?: string, name?: string, exists?: bool}|null
+	 */
+	public function registerSyncContacts(string $userId, ?string $uri, int $key, ?string $newAddrBookName): ?array {
+		$addressBook = $this->getOrCreateAddressBook($userId, $uri, $key, $newAddrBookName);
+		if (isset($addressBook['error'])) {
+			return $addressBook;
+		}
+
+		$argument = [
+			'user_id' => $userId,
+			'address_book_key' => $addressBook['key'],
+			'address_book_uri' => $addressBook['uri'],
+			'address_book_name' => $addressBook['name'],
+		];
+
+		foreach ($this->jobList->getJobsIterator(ImportContactsJob::class, null, 0) as $job) {
+			$args = $job->getArgument();
+
+			if ($args['user_id'] == $argument['user_id'] && $args['address_book_key'] == $argument['address_book_key']) {
+				$job->setArgument($argument);
+				return null;
+			}
+		}
+
+		$this->jobList->add(ImportContactsJob::class, $argument);
+		return null;
+	}
+
+	/**
+	 * Unregister an address book to periodically be synced and kept up to date
+	 * in the background.
+	 *
+	 * @param string $userId
+	 * @param int $key
+	 * @return void
+	 */
+	public function unregisterSyncContacts(string $userId, int $key): void {
+		foreach ($this->jobList->getJobsIterator(ImportContactsJob::class, null, 0) as $job) {
+			/** @var array{user_id: string, address_book_key: int} $args */
+			$args = $job->getArgument();
+
+			if ($args['user_id'] == $userId && $args['address_book_key'] == $key) {
+				$this->jobList->remove($job, $args);
+				return;
+			}
+		}
 	}
 }

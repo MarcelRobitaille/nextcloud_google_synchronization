@@ -151,7 +151,7 @@ export default {
 			}, 2000)()
 		},
 		onDeleteJobs() {
-			axios.delete(generateUrl('/apps/google_synchronization/reset-sync-calendar'))
+			axios.delete(generateUrl('/apps/google_synchronization/delete-background-jobs'))
 				.then(() => {
 					showSuccess(
 						this.n('google_synchronization', 'Successfully deleted background jobs', 'Successfully deleted background jobs', 1),

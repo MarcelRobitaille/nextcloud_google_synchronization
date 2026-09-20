@@ -79,6 +79,12 @@
 							</template>
 							{{ t('google_synchronization', 'Import in "{name}" address book', { name: selectedAddressBookName }) }}
 						</NcButton>
+						<NcCheckboxRadioSwitch v-if="showAddressBooks && selectedAddressBook > -1 && (selectedAddressBook > 0 || newAddressBookName)"
+							:model-value="syncContactsActive"
+							:loading="loadingSyncContacts[selectedAddressBook]"
+							@update:model-value="onContactsSyncChange">
+							{{ t('google_synchronization', 'Sync contacts in "{name}" address book', { name: selectedAddressBookName }) }}
+						</NcCheckboxRadioSwitch>
 						<br>
 					</div>
 				</div>
@@ -414,6 +420,7 @@ export default {
 			selectedAddressBook: 0,
 			newAddressBookName: 'Google Contacts import',
 			importingContacts: false,
+			loadingSyncContacts: {},
 			// photos (Picker API)
 			creatingPickerSession: false,
 			startingPhotoImport: false,
@@ -459,6 +466,13 @@ export default {
 			return this.selectedAddressBook === 0
 				? null
 				: this.addressbooks[this.selectedAddressBook].uri
+		},
+		syncContactsActive() {
+			if (this.selectedAddressBook <= 0) {
+				return false
+			}
+			const ab = this.addressbooks[this.selectedAddressBook]
+			return !!(ab && ab.isSyncRegistered)
 		},
 		enoughSpaceForDrive() {
 			return this.driveSize === 0 || this.state.user_quota === 'none' || this.driveSize < this.state.free_space
@@ -663,7 +677,7 @@ export default {
 		},
 		getLocalAddressBooks() {
 			const url = generateUrl('/apps/google_synchronization/local-addressbooks')
-			axios.get(url)
+			return axios.get(url)
 				.then((response) => {
 					if (response.data && Object.keys(response.data).length > 0) {
 						this.addressbooks = response.data
@@ -695,24 +709,26 @@ export default {
 					const nbSeen = response.data.nbSeen
 					const nbAdded = response.data.nbAdded
 					const nbUpdated = response.data.nbUpdated
+					const nbDeleted = response.data.nbDeleted ?? 0
 					showSuccess(
 						this.n(
 							'google_synchronization',
-							'{nbSeen} Google contact seen. {nbAdded} added, {nbUpdated} updated in {name}',
-							'{nbSeen} Google contacts seen. {nbAdded} added, {nbUpdated} updated in {name}',
+							'{nbSeen} Google contact seen. {nbAdded} added, {nbUpdated} updated, {nbDeleted} deleted in {name}',
+							'{nbSeen} Google contacts seen. {nbAdded} added, {nbUpdated} updated, {nbDeleted} deleted in {name}',
 							nbSeen,
-							{ nbAdded, nbSeen, nbUpdated, name: this.selectedAddressBookName },
+							{ nbAdded, nbSeen, nbUpdated, nbDeleted, name: this.selectedAddressBookName },
 						),
 					)
 					this.showAddressBooks = false
+					this.getLocalAddressBooks()
 				})
 				.catch((error) => {
 					showServerError(
-						error,
-						t('google_synchronization', 'Failed to get address book list'),
+						error.response.data?.error ?? error,
+						t('google_synchronization', 'Failed to import contacts'),
 					)
 				})
-				.then(() => {
+				.finally(() => {
 					this.importingContacts = false
 				})
 		},
@@ -745,11 +761,11 @@ export default {
 				})
 				.catch((error) => {
 					showServerError(
-						error,
+						error.response.data?.error ?? error,
 						t('google_synchronization', 'Failed to import Google calendar'),
 					)
 				})
-				.then(() => {
+				.finally(() => {
 					this.importingCalendar[calId] = false
 				})
 		},
@@ -956,6 +972,52 @@ export default {
 				'httpd/unix-directory',
 				true,
 			)
+		},
+		onContactsSyncChange(desiredState) {
+			const key = this.selectedAddressBook
+			const req = {
+				params: {
+					key,
+					desiredState,
+					uri: this.selectedAddressBookUri,
+					newAddressBookName: this.selectedAddressBook === 0 ? this.newAddressBookName : null,
+				},
+			}
+			this.loadingSyncContacts[key] = true
+			const actionMessage = `${desiredState ? '' : 'un'}register`
+			const successMessage = `Successfully ${actionMessage}ed background job`
+			const errorMessage = `Failed to ${actionMessage} background job`
+			const url = generateUrl('/apps/google_synchronization/set-sync-contacts')
+			axios.get(url, req)
+				.then((_response) => {
+					if (this.selectedAddressBook === 0) {
+						// a new address book was created server-side, refresh the list
+						this.getLocalAddressBooks().then(() => {
+							for (const [k, ab] of Object.entries(this.addressbooks)) {
+								if (ab.uri === this.newAddressBookName) {
+									this.selectedAddressBook = parseInt(k)
+									this.newAddressBookName = ''
+									break
+								}
+							}
+						})
+					} else {
+						this.addressbooks[this.selectedAddressBook].isSyncRegistered = desiredState
+					}
+					showSuccess(
+						this.n('google_synchronization', successMessage, successMessage, 1),
+					)
+				})
+				.catch((error) => {
+					console.error(errorMessage, error)
+					showServerError(
+						error,
+						t('google_synchronization', errorMessage),
+					)
+				})
+				.finally(() => {
+					this.loadingSyncContacts[key] = false
+				})
 		},
 		getDriveImportValues(launchLoop = false) {
 			const url = generateUrl('/apps/google_synchronization/import-files-info')
