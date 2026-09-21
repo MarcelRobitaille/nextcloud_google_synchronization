@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ### Fixed
 
 - Fix photos picker URLs #56 @MarcelRobitaille.
+- Fix race condition in photos picker @MarcelRobitaille.
 
 ## [4.3.0] - 2026-09-20
 
