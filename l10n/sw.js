@@ -1,5 +1,5 @@
 OC.L10N.register(
-    "integration_google",
+    "google_synchronization",
     {
     "No logged in user" : "Hakuna mtumiaji aliyeingia",
     "Missing refresh token in Google response." : "Token ya kuonesha upya haipo katika jibu la Google",

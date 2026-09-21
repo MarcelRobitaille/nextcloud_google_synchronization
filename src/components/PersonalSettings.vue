@@ -804,7 +804,7 @@ export default {
 				})
 		},
 		getPhotoImportValues(launchLoop = false) {
-			const url = generateUrl('/apps/integration_google/import-photos-info')
+			const url = generateUrl('/apps/google_synchronization/import-photos-info')
 			axios.get(url)
 				.then((response) => {
 					if (response.data && Object.keys(response.data).length > 0) {
@@ -841,7 +841,7 @@ export default {
 				return
 			}
 			this.creatingPickerSession = true
-			const url = generateUrl('/apps/integration_google/picker-session')
+			const url = generateUrl('/apps/google_synchronization/picker-session')
 			axios.post(url)
 				.then((response) => {
 					this.pickerSessionId = response.data.id
@@ -862,9 +862,9 @@ export default {
 					this.pickerPollTimer = setInterval(() => this.pollPickerSession(), pollInterval)
 				})
 				.catch((error) => {
-					showError(
-						t('google_synchronization', 'Failed to create Google Photos picker session')
-						+ ': ' + error.response?.request?.responseText,
+					showServerError(
+						error,
+						t('google_synchronization', 'Failed to create Google Photos picker session'),
 					)
 				})
 				.finally(() => {
@@ -878,10 +878,11 @@ export default {
 			if (!this.pickerSessionId) {
 				return
 			}
-			const url = generateUrl('/apps/integration_google/picker-session')
+			const url = generateUrl('/apps/google_synchronization/picker-session')
 			axios.get(url, { params: { sessionId: this.pickerSessionId } })
 				.then((response) => {
-					if (response.data.mediaItemsSet === true && !this.startingPhotoImport) {
+					// Check pickerSessionId again to fix race condition (could have changed in the meantime)
+					if (response.data.mediaItemsSet === true && !this.startingPhotoImport && this.pickerSessionId) {
 						this.onImportPhotos()
 					}
 				})
@@ -894,7 +895,7 @@ export default {
 		 */
 		onImportPhotos() {
 			this.startingPhotoImport = true
-			const url = generateUrl('/apps/integration_google/import-photos')
+			const url = generateUrl('/apps/google_synchronization/import-photos')
 			axios.post(url, { sessionId: this.pickerSessionId })
 				.then((response) => {
 					this.startingPhotoImport = false
@@ -918,9 +919,9 @@ export default {
 				})
 				.catch((error) => {
 					this.startingPhotoImport = false
-					showError(
-						t('google_synchronization', 'Failed to start importing Google Photos')
-						+ ': ' + error.response?.request?.responseText,
+					showServerError(
+						error,
+						t('google_synchronization', 'Failed to start importing Google Photos'),
 					)
 				})
 		},
@@ -934,7 +935,7 @@ export default {
 			this.pickerSessionId = null
 			this.pickerUri = null
 			if (sessionId) {
-				const url = generateUrl('/apps/integration_google/picker-session')
+				const url = generateUrl('/apps/google_synchronization/picker-session')
 				axios.delete(url, { params: { sessionId } })
 					.catch((error) => {
 						console.debug('Failed to delete picker session', error)
@@ -952,7 +953,7 @@ export default {
 					nb_imported_photos: '0',
 				},
 			}
-			const url = generateUrl('/apps/integration_google/config')
+			const url = generateUrl('/apps/google_synchronization/config')
 			axios.put(url, req)
 				.catch((error) => {
 					console.debug(error)
