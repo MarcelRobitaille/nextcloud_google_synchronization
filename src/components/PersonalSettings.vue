@@ -862,9 +862,9 @@ export default {
 					this.pickerPollTimer = setInterval(() => this.pollPickerSession(), pollInterval)
 				})
 				.catch((error) => {
-					showError(
-						t('google_synchronization', 'Failed to create Google Photos picker session')
-						+ ': ' + error.response?.request?.responseText,
+					showServerError(
+						error,
+						t('google_synchronization', 'Failed to create Google Photos picker session'),
 					)
 				})
 				.finally(() => {
@@ -918,9 +918,9 @@ export default {
 				})
 				.catch((error) => {
 					this.startingPhotoImport = false
-					showError(
-						t('google_synchronization', 'Failed to start importing Google Photos')
-						+ ': ' + error.response?.request?.responseText,
+					showServerError(
+						error,
+						t('google_synchronization', 'Failed to start importing Google Photos'),
 					)
 				})
 		},
