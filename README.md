@@ -79,6 +79,7 @@ This also allows me to decide for myself if my releases are major, minor, or pat
 
 | Google Synchronization version | Google Integration version |
 | ------------------------------ | -------------------------- |
+| 4.3.0                          | 4.4.1                      |
 | 4.3.0                          | 4.4.0                      |
 | 4.2.0                          | 4.3.1                      |
 | 4.1.0                          | 4.2.0                      |
@@ -109,6 +110,9 @@ If there is a strong business case for any development of this app, we will cons
 
 - Google Photos import is selection-based and does not import an entire library automatically. It is limited to 2000 items per import session, and users must manually select which photos and videos to import.
 - Google does not provide location data for imported photos and imported videos may be lower quality than the original files provided in Google Photos.
+
+> [!IMPORTANT]
+> You have to enable the "Google Photos Picker API" to use this feature. If you set up the app before the picker API was supported, you will not have been prompted to do this. Go to https://console.developers.google.com/apis/api/photospicker.googleapis.com/overview and enable the API for your project.
 
 ## Development guide
 
