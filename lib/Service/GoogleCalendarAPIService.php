@@ -74,9 +74,204 @@ class GoogleCalendarAPIService {
 	 */
 	private function calendarExists(string $userId, string $uri): ?int {
 		$res = $this->caldavBackend->getCalendarByUri('principals/users/' . $userId, $uri);
-		return is_null($res)
+		return is_null($res) || $this->isInTrash($res)
 			? null
 			: $res['id'];
+	}
+
+	/**
+	 * Whether a calendar is in the trash, i.e. was deleted from the UI.
+	 *
+	 * Deleting a calendar in Nextcloud only stamps deleted_at, and none of
+	 * getCalendarsForUser(), getCalendarByUri() or getCalendarById() filter it out
+	 * on any supported version (32 to 35): they select the column, because it is in
+	 * propertyMap, but never look at it. Such a calendar is gone from the UI and
+	 * cannot be restored from it either, so importing into it would make the sync
+	 * look like it silently stopped working.
+	 *
+	 * @param array<string, mixed> $calendar as returned by the CalDavBackend getters
+	 */
+	private function isInTrash(array $calendar): bool {
+		return ($calendar['{http://owncloud.org/ns}deleted-at'] ?? null) !== null;
+	}
+
+	/**
+	 * Display name given to an imported Google calendar.
+	 *
+	 * The translated suffix is purely cosmetic: it must never take part in the
+	 * identity of the calendar.
+	 */
+	private function getImportedCalendarName(string $calName): string {
+		return trim($calName) . ' (' . $this->l10n->t('Google Calendar import') . ')';
+	}
+
+	/**
+	 * CalDAV URI of an imported Google calendar.
+	 *
+	 * Derived from the Google calendar id because, unlike the display name, it is
+	 * unique per calendar and survives renaming the calendar in Google. It is
+	 * deliberately independent of the language of the Nextcloud instance.
+	 *
+	 * Replaces four earlier naming schemes, see isLegacyImportOf() for those and
+	 * for the calendars they left behind.
+	 */
+	private function getStableCalendarUri(string $calId): string {
+		return 'google-import-' . substr(hash('sha256', $calId), 0, 32);
+	}
+
+	/**
+	 * Whether a calendar was created by an earlier version of the app as the
+	 * import of the Google calendar of the given name.
+	 *
+	 * The app has named that calendar four different ways over the years, and one
+	 * created by any of them still has to be recognised here, or its events would
+	 * be orphaned and the Google calendar imported all over again:
+	 *
+	 *   uri                    displayname      since
+	 *   ---------------------  ---------------  -----------------------------------
+	 *   trim($calName) . '…'   same as the uri  3c7c084, 68a6806
+	 *   urlencode(name)        same as the uri  db4fad6
+	 *   urlencode(name)        name             3a1ed54, 88670a4, 0f158eb
+	 *   google-import-<hash>   name             f0b6e04
+	 *
+	 * 3c7c084 could also append a counter to break ties, which is what the
+	 * (?:-\d+)? below matches. 3a1ed54 and 88670a4 left the stored uri alone but
+	 * moved the key the calendar was looked up by from one form to the other,
+	 * which is how the duplicates of #46 came about: every release adopted a
+	 * different one of the calendars an earlier release had created. 163a1bd is
+	 * deliberately not in the list despite its subject, it URL encoded the Google
+	 * calendar ids rather than the name of the Nextcloud calendar.
+	 *
+	 * Re-derive the table with:
+	 *   git log -p -- lib/Service/GoogleCalendarAPIService.php
+	 *     | grep -E "^\+.*(newCalName|newCalUri|createCalendar\('principals"
+	 *
+	 * The translated suffix is never compared literally, only the name of the
+	 * Google calendar, the parenthesised suffix every name ends with, and the
+	 * counter that some versions appended to it to break ties.
+	 *
+	 * @param array{id: int, uri?: string, principaluri?: string, '{DAV:}displayname'?: string} $calendar
+	 */
+	private function isLegacyImportOf(array $calendar, string $calName): bool {
+		$uri = $calendar['uri'] ?? '';
+		// Some listings do not carry the display name, the URI is then all there is
+		$name = ($calendar['{DAV:}displayname'] ?? '') ?: $uri;
+		if ($name === '') {
+			return false;
+		}
+		// All the schemes they went through are accepted and nothing else: a calendar
+		// whose URI and display name disagree was not named by this app, and taking
+		// it over means overwriting it
+		if (!in_array($uri, [$name, urlencode($name), urldecode($name)], true)) {
+			return false;
+		}
+		// No /u on purpose: names may hold invalid UTF-8, which would make preg_match() fail
+		$pattern = '/^' . preg_quote(trim($calName), '/') . '(?:-\d+)? \(.*\)$/D';
+		return preg_match($pattern, $name) === 1 || preg_match($pattern, urldecode($name)) === 1;
+	}
+
+	/**
+	 * Find the calendars earlier versions of the app created for a Google
+	 * calendar, which are duplicates of each other whenever the app was run with
+	 * more than one language, or more than one naming scheme, over time.
+	 *
+	 * @return int[] the ids of the matching calendars, in ascending order
+	 */
+	private function findLegacyImportedCalendars(string $principalUri, string $calName): array {
+		if (trim($calName) === '') {
+			// Without a name there is nothing to recognise a calendar by
+			return [];
+		}
+		$ids = [];
+		foreach ($this->caldavBackend->getCalendarsForUser($principalUri) as $calendar) {
+			/** @var array{id: int, uri?: string, principaluri?: string, '{DAV:}displayname'?: string} $calendar */
+			if (($calendar['principaluri'] ?? null) !== $principalUri
+				|| $this->isInTrash($calendar)
+				|| !$this->isLegacyImportOf($calendar, $calName)) {
+				continue;
+			}
+			$ids[] = (int)$calendar['id'];
+		}
+		return $ids;
+	}
+
+	/**
+	 * Get the Nextcloud calendar backing a Google calendar, creating it if needed.
+	 *
+	 * Earlier versions named the calendar after the Google calendar and the
+	 * translated suffix of that name, which made the very same Google calendar
+	 * get imported more than once. Those calendars are still recognised here, so
+	 * that existing imports keep being updated instead of being duplicated again;
+	 * see isLegacyImportOf() for the naming schemes involved.
+	 *
+	 * @param string $userId
+	 * @param string $calId the Google calendar id
+	 * @param string $calName the Google calendar name, used for the display name
+	 * @param ?string $color
+	 * @return array{int, bool} the calendar id, and whether it was just created
+	 */
+	private function resolveImportedCalendar(string $userId, string $calId, string $calName, ?string $color): array {
+		$ncCalId = $this->calendarExists($userId, $this->getStableCalendarUri($calId));
+		if ($ncCalId !== null) {
+			return [$ncCalId, false];
+		}
+
+		$principalUri = 'principals/users/' . $userId;
+		$displayName = $this->getImportedCalendarName($calName);
+
+		// Calendar created by an earlier version of the app, in any of the naming
+		// schemes and any of the languages it went through.
+		$legacyIds = $this->findLegacyImportedCalendars($principalUri, $calName);
+		if ($legacyIds !== []) {
+			// keep the oldest one, the others are duplicates of the same calendar
+			$kept = min($legacyIds);
+			$this->logger->debug(
+				"Reusing Nextcloud calendar $kept previously imported from Google calendar $calId",
+				['app' => Application::APP_ID]
+			);
+			if (count($legacyIds) > 1) {
+				$duplicates = array_values(array_diff($legacyIds, [$kept]));
+				// Logged on every run: an adopted calendar keeps its legacy URI, so
+				// the scan is repeated for as long as the duplicates are left in place
+				$this->logger->debug(
+					'Nextcloud calendars ' . implode(', ', $legacyIds)
+						. " all import the Google calendar $calId."
+						. "Keeping $kept and ignoring " . implode(', ', $duplicates)
+						. '. The unused ones can be deleted manually.',
+					['app' => Application::APP_ID]
+				);
+			}
+			return [$kept, false];
+		}
+
+		// A Google calendar without a name cannot be recognised by one, so fall
+		// back to the exact URIs earlier versions would have used for it.
+		foreach ([urlencode($displayName), $displayName] as $legacyUri) {
+			$legacyId = $this->calendarExists($userId, $legacyUri);
+			if ($legacyId !== null) {
+				$this->logger->debug(
+					"Reusing Nextcloud calendar $legacyId previously imported from Google calendar $calId",
+					['app' => Application::APP_ID]
+				);
+				return [$legacyId, false];
+			}
+		}
+
+		$params = [];
+		if ($color) {
+			$params['{http://apple.com/ns/ical/}calendar-color'] = $color;
+		}
+		$params['{DAV:}displayname'] = $displayName;
+		$newCalId = $this->caldavBackend->createCalendar(
+			$principalUri,
+			$this->getStableCalendarUri($calId),
+			$params,
+		);
+		// Ensures the right name is given to the calendar
+		$proppatch = new PropPatch(['{DAV:}displayname' => $displayName]);
+		$this->caldavBackend->updateCalendar($newCalId, $proppatch);
+
+		return [$newCalId, true];
 	}
 
 	/**
@@ -341,23 +536,8 @@ class GoogleCalendarAPIService {
 	 * @return array{nbAdded: int, nbUpdated: int, calName: string} | array{error: string}
 	 */
 	public function importCalendar(string $userId, string $calId, string $calName, ?string $color = null): array {
-		$params = [];
-		if ($color) {
-			$params['{http://apple.com/ns/ical/}calendar-color'] = $color;
-		}
-
-		$newCalName = trim($calName) . ' (' . $this->l10n->t('Google Calendar import') . ')';
-		$params['{DAV:}displayname'] = $newCalName;
-		$newCalUri = urlencode($newCalName);
-
-		$ncCalId = $this->calendarExists($userId, $newCalUri);
-		$calendarIsNew = is_null($ncCalId);
-		if (is_null($ncCalId)) {
-			$ncCalId = $this->caldavBackend->createCalendar('principals/users/' . $userId, $newCalUri, $params);
-			// Ensures the right name is given to the calendar
-			$proppatch = new PropPatch(['{DAV:}displayname' => $newCalName]);
-			$this->caldavBackend->updateCalendar($ncCalId, $proppatch);
-		}
+		$newCalName = $this->getImportedCalendarName($calName);
+		[$ncCalId, $calendarIsNew] = $this->resolveImportedCalendar($userId, $calId, $calName, $color);
 
 		/** @var Set<string> $unseenURIs */
 		$unseenURIs = new Set();

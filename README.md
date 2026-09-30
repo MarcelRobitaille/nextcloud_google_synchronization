@@ -79,7 +79,8 @@ This also allows me to decide for myself if my releases are major, minor, or pat
 
 | Google Synchronization version | Google Integration version |
 | ------------------------------ | -------------------------- |
-| 4.3.0                          | 4.4.1                      |
+| 4.3.2                          | 4.4.0                      |
+| 4.3.1                          | 4.4.0                      |
 | 4.3.0                          | 4.4.0                      |
 | 4.2.0                          | 4.3.1                      |
 | 4.1.0                          | 4.2.0                      |
