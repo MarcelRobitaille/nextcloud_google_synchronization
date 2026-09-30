@@ -982,6 +982,22 @@ namespace OCA\DAV\CalDAV {
 namespace Sabre\CalDAV\Backend {
 
     /**
+     * Referenced by the classes below, never analysed: declared so that psalm
+     * does not report them as missing dependencies.
+     */
+    interface BackendInterface {
+    }
+
+    interface SyncSupport {
+    }
+
+    interface SubscriptionSupport {
+    }
+
+    interface SchedulingSupport {
+    }
+
+    /**
      * Abstract Calendaring backend. Extend this class to create your own backends.
      *
      * Checkout the BackendInterface for all the methods that must be implemented.

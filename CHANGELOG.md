@@ -6,9 +6,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+## [4.3.2] - 2026-09-30
+
 ### Fixed
 
 - Fix invalid UTF-8 when truncating long event fields #17 @Gobidev.
+- Fix "Import all events including Birthdays" being saved inverted #46 @MarcelRobitaille.
+- Fix duplicate calendars with different languages #46 @MarcelRobitaille.
 
 ## [4.3.1] - 2026-09-21
 
