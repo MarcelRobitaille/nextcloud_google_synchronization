@@ -396,11 +396,35 @@ class GoogleCalendarAPIService {
 			$eventData .= "RECURRENCE-ID;$recurrenceId\n";
 		}
 
+		// An occurrence deleted in Google Calendar comes back as a cancelled
+		// exception without start and end, so there is no VEVENT to generate for
+		// it. Exclude it from the recurrence instead of letting the RRULE bring
+		// it back. Deduplicate and sort the dates so the generated data does not
+		// depend on the order Google returns the exceptions in.
+		$excludedDates = [];
+		foreach ($exceptions as $candidateException) {
+			if (($candidateException['recurringEventId'] ?? null) !== $e['id']
+				|| ($candidateException['id'] ?? '') === $e['id']
+				|| strtolower($candidateException['status'] ?? '') !== 'cancelled') {
+				continue;
+			}
+			$originalStart = $this->mapTime($candidateException['originalStartTime'] ?? []);
+			if ($originalStart !== '') {
+				$excludedDates[$originalStart] = true;
+			}
+		}
+		ksort($excludedDates);
+		foreach (array_keys($excludedDates) as $originalStart) {
+			$eventData .= "EXDATE;$originalStart\n";
+		}
+
 		$eventData .= 'CLASS:PUBLIC' . "\n"
 			. 'END:VEVENT' . "\n";
 
 		foreach ($exceptions as $candidateException) {
-			if (($candidateException['recurringEventId'] == $e['id']) && ($candidateException['id'] != $e['id'])) {
+			if (($candidateException['recurringEventId'] ?? null) === $e['id']
+				&& ($candidateException['id'] ?? '') !== $e['id']
+				&& strtolower($candidateException['status'] ?? '') !== 'cancelled') {
 				$eventData .= $this->generateEventData($candidateException, $exceptions, $ncCalId, $eventColors);
 			}
 		}
@@ -560,12 +584,13 @@ class GoogleCalendarAPIService {
 
 		// Normal events
 		$events = [];
-		// Exceptions to recurring events (recurringEventId set).
-		$exceptions = [];
+		// Exceptions to recurring events (recurringEventId set), grouped by the
+		// id of the event they are an exception to.
+		$exceptionsByEvent = [];
 
 		foreach ($eventsGenerator as $e) {
 			if (isset($e['recurringEventId'])) {
-				array_push($exceptions, $e);
+				$exceptionsByEvent[$e['recurringEventId']][] = $e;
 			} else {
 				array_push($events, $e);
 			}
@@ -585,11 +610,15 @@ class GoogleCalendarAPIService {
 			}
 
 			$existingEvent = null;
+			$isRecurring = isset($e['recurrence']) && is_array($e['recurrence']);
 			// check if we should update existing events (on existing calendars only :-)
 			if (!$calendarIsNew) {
 				// check if it already exists and if we should update it
 				$existingEvent = $this->caldavBackend->getCalendarObject($ncCalId, $objectUri);
-				if ($existingEvent !== null) {
+				// Recurring events are always regenerated below: modifying or
+				// deleting an occurrence does not touch the event itself, so its
+				// updated timestamp cannot tell whether they changed.
+				if ($existingEvent !== null && !$isRecurring) {
 					if (!isset($e['updated'])) {
 						continue;
 					}
@@ -601,7 +630,7 @@ class GoogleCalendarAPIService {
 				}
 			}
 
-			$eventData = $this->generateEventData($e, $exceptions, $ncCalId, $eventColors);
+			$eventData = $this->generateEventData($e, $exceptionsByEvent[$objectUri] ?? [], $ncCalId, $eventColors);
 
 			if ($eventData == '') {
 				continue;
@@ -614,6 +643,11 @@ class GoogleCalendarAPIService {
 				. 'END:VCALENDAR';
 
 			if ($existingEvent !== null) {
+				// Recurring events are regenerated on every run, do not write
+				// when the result did not change.
+				if ($existingEvent['calendardata'] === $calData) {
+					continue;
+				}
 				try {
 					$this->caldavBackend->updateCalendarObject($ncCalId, $objectUri, $calData);
 					$nbUpdated++;

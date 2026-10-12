@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Remove deleted occurrences of recurring events from the imported calendar @Gobidev.
+
 ## [4.3.2] - 2026-09-30
 
 ### Fixed
