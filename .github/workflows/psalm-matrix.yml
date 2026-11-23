@@ -68,7 +68,9 @@ jobs:
           composer i
 
       - name: Check for vulnerable PHP dependencies
-        run: composer require --dev roave/security-advisories:dev-latest
+        # roave/security-advisories conflicts with all PHP 8.1 versions; the
+        # platform override is intentionally 8.1.0 for this fork.
+        run: composer require --dev roave/security-advisories:dev-latest --ignore-platform-req=php
 
       - name: Install dependencies # zizmor: ignore[template-injection]
         run: composer require --dev 'nextcloud/ocp:${{ matrix.ocp-version }}' --ignore-platform-reqs --with-dependencies
